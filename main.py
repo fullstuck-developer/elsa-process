@@ -60,12 +60,21 @@ def auto_monitor_loop():
                         
                         # Nếu PID này chưa bị đóng băng, tiến hành tóm cổ
                         if pid not in frozen_pids:
-                            proc.suspend()
-                            frozen_pids.add(pid)
-                except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
+                            try:
+                                proc.suspend()
+                                frozen_pids.add(pid)
+                                print(f"[{time.strftime('%X')}] Đã ĐÓNG BĂNG thành công: {proc_name} (PID: {pid})")
+                            except psutil.AccessDenied:
+                                print(f"[{time.strftime('%X')}] LỖI: Không đủ quyền (Access Denied) để đóng băng {proc_name} (PID: {pid}). Hãy chạy bằng quyền Administrator!")
+                            except Exception as e:
+                                print(f"[{time.strftime('%X')}] LỖI đóng băng {proc_name} (PID: {pid}): {e}")
+                except (psutil.NoSuchProcess, AttributeError):
                     pass
                     
             # Dọn dẹp bộ nhớ: xóa các PID không còn tồn tại
+            dead_pids = frozen_pids - current_pids
+            for d_pid in dead_pids:
+                print(f"[{time.strftime('%X')}] Đối tượng (PID: {d_pid}) đã biến mất. Ngừng tracking.")
             frozen_pids.intersection_update(current_pids)
         time.sleep(2)
 
@@ -73,6 +82,11 @@ def toggle_target(item=None):
     """Công tắc Tắt/Bật toàn bộ Lá chắn Tự động"""
     global auto_freeze_enabled, frozen_pids, icon
     auto_freeze_enabled = not auto_freeze_enabled
+    
+    if auto_freeze_enabled:
+        print(f"\n[{time.strftime('%X')}] >>> LÁ CHẮN AUTO-FREEZE ĐÃ BẬT <<<")
+    else:
+        print(f"\n[{time.strftime('%X')}] >>> LÁ CHẮN AUTO-FREEZE ĐÃ TẮT <<<")
     
     # Tương tác ngay lập tức với các tiến trình đang có
     for proc in psutil.process_iter(['pid', 'name']):
@@ -82,12 +96,27 @@ def toggle_target(item=None):
                 pid = proc.info['pid']
                 if auto_freeze_enabled:
                     if pid not in frozen_pids:
-                        proc.suspend()
-                        frozen_pids.add(pid)
+                        try:
+                            proc.suspend()
+                            frozen_pids.add(pid)
+                            print(f"[{time.strftime('%X')}] (Thủ công) Đã ĐÓNG BĂNG: {proc_name} (PID: {pid})")
+                        except psutil.AccessDenied:
+                            print(f"[{time.strftime('%X')}] LỖI: Access Denied khi đóng băng {proc_name} (PID: {pid}). Chạy lại bằng Administrator!")
+                        except Exception as e:
+                            print(f"[{time.strftime('%X')}] LỖI đóng băng {proc_name} (PID: {pid}): {e}")
                 else:
-                    proc.resume()
-                    frozen_pids.discard(pid)
-        except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
+                    try:
+                        # Gọi resume nhiều lần để đảm bảo xoá sạch Suspend Count (nếu > 1)
+                        for _ in range(3):
+                            proc.resume()
+                        
+                        frozen_pids.discard(pid)
+                        print(f"[{time.strftime('%X')}] (Thủ công) Đã RÃ ĐÔNG: {proc_name} (PID: {pid})")
+                    except psutil.AccessDenied:
+                        print(f"[{time.strftime('%X')}] LỖI: Access Denied khi rã đông {proc_name} (PID: {pid}). Chạy lại bằng Administrator!")
+                    except Exception as e:
+                        print(f"[{time.strftime('%X')}] LỖI rã đông {proc_name} (PID: {pid}): {e}")
+        except (psutil.NoSuchProcess, AttributeError):
             pass
             
     # Cập nhật Icon
@@ -122,7 +151,19 @@ def keyboard_listener():
     keyboard.wait()
 
 def quit_app(icon, item):
+    # Rã đông tất cả trước khi thoát
+    for proc in psutil.process_iter(['pid', 'name']):
+        try:
+            pid = proc.info['pid']
+            if pid in frozen_pids:
+                for _ in range(3):
+                    proc.resume()
+                print(f"[{time.strftime('%X')}] Đã rã đông PID: {pid} trước khi thoát.")
+        except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
+            pass
+    
     icon.stop()
+    os._exit(0)
 
 def main():
     global icon

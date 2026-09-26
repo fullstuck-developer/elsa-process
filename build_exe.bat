@@ -14,7 +14,7 @@ py -m pip install -r requirements.txt
 py -m pip install pyinstaller
 echo.
 echo 2. Dang dong goi thanh file .exe...
-py -m PyInstaller --name Elsa --noconsole --onefile --add-data "ice_emoji.png;." --icon NONE main.py
+py -m PyInstaller --name Elsa --onefile --add-data "ice_emoji.png;." --icon NONE main.py
 echo.
 echo ====================================================
 echo DONE! Vui long kiem tra trong thu muc "dist" da co file Elsa.exe chua.
